@@ -1,6 +1,7 @@
 # Study AI
 
 > 本地多源知识库问答助手 — 从复习资料到代码仓库，一个 Agent 搞定问答。
+> 
 > 基于 LangChain + Qdrant + FastEmbed 的本地 RAG 知识库问答助手，集成 Agent 意图规划、FlashRank 重排序与知识图谱可视化。
 
 ## 项目背景
