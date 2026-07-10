@@ -1,10 +1,11 @@
 # Study AI
 
 > 本地多源知识库问答助手 — 从复习资料到代码仓库，一个 Agent 搞定问答。
+> 基于 LangChain + Qdrant + FastEmbed 的本地 RAG 知识库问答助手，集成 Agent 意图规划、FlashRank 重排序与知识图谱可视化。
 
-## 项目缘起
+## 项目背景
 
-前几月期末复习，想要一个能快速整理资料、精准回答问题、自动生成知识图谱的工具，找了几个开源的感觉总是太蠢缺点智能感，于是自己做了一个 RAG 知识库 Agent，后面又加上了网页抓取、GitHub 仓库索引、本地代码目录和多源数据渠道。
+上个月期末复习，想要一个能快速整理资料、精准回答问题、自动生成知识图谱的工具，找了几个开源的感觉总是觉得回复缺点智能感，于是自己做了一个 RAG 知识库 Agent，后面又加上了网页抓取、GitHub 仓库索引、本地代码目录和多源数据渠道。
 
 ## 功能
 
@@ -87,14 +88,20 @@ http://localhost:8501
 
 | 技术 | 用途 |
 |------|------|
-| **Streamlit** | 交互式 Web UI 框架 |
-| **LangChain** | LLM 应用编排（Chain / Retriever / Agent） |
-| **Qdrant** | 向量数据库，HNSW 索引 + Payload 过滤 |
-| **FastEmbed** | ONNX Runtime 加速的 Embedding 推理 |
-| **FlashRank** | 交叉编码器重排序 |
-| **Groq / DeepSeek** | LLM 推理后端（OpenAI 兼容 API） |
-| **PyPDFium2** | PDF 解析引擎 |
-| **Poetry + pytest** | 依赖管理与测试 |
+| **RAG** | 检索增强生成架构，文档导入 → 切分 → 向量化 → 检索 → 重排序 → 生成回答 |
+| **LangChain** | LLM 应用编排框架，管理 Chain / Retriever / Agent 全链路 |
+| **Qdrant** | 向量数据库，HNSW 近似最近邻索引 + Payload 条件过滤，本地磁盘持久化 |
+| **FastEmbed** | 轻量级 Embedding 推理引擎，基于 ONNX Runtime 加速 |
+| **BAAI/bge-small-zh-v1.5** | 中英文双语 Embedding 模型（512 维），兼顾中文检索质量 |
+| **FlashRank** | 交叉编码器重排序，对初检结果做精排提升相关性 |
+| **LLMChainFilter** | LLM 驱动的语义过滤，二次筛选剔除无关片段 |
+| **SemanticChunker** | 语义感知文档切分，避免固定长度切割破坏上下文 |
+| **Agent Planner** | LLM 驱动的意图规划器，5 种意图分类 + 来源自动选择 |
+| **Groq / DeepSeek** | LLM 推理后端，OpenAI 兼容 API 接口，支持多模型切换 |
+| **Knowledge Graph** | LLM 抽取实体关系三元组，生成交互式力导向图可视化 |
+| **Streamlit** | 交互式 Web UI，快速搭建数据应用和对话界面 |
+| **PyPDFium2** | PDF 解析引擎，支持多页提取和元数据读取 |
+| **Poetry + pytest** | 依赖管理与自动化测试 |
 
 ## 项目结构
 
@@ -121,8 +128,6 @@ study-ai/
 ├── pyproject.toml                # Poetry 项目配置
 └── README.md                     # 项目说明
 ```
-
-运行产生的 `docs-db/`、`tmp/`、`history/`、`knowledge-graphs/`、日志和缓存文件不需要提交。
 
 ## License
 
