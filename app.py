@@ -11,12 +11,7 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 load_dotenv()
-for env_path in (
-    Path(__file__).resolve().parent / ".env",
-    Path(r"D:\A_shixi\universal-knowledge-agent\.env"),
-    Path(r"D:\A_shixi\.env"),
-):
-    load_dotenv(env_path, override=False)
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 from ragbase.agent_planner import (
     CONTENT_INTENTS,
@@ -315,7 +310,7 @@ def render_source_controls() -> None:
     with tab_code:
         code_dir = st.text_input(
             "本地代码目录",
-            placeholder=r"D:\A_shixi\your-project",
+            placeholder=r"C:\path\to\your-project",
             key=source_widget_key("code_dir"),
         )
         if st.button("索引代码目录", use_container_width=True):

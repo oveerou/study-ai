@@ -13,12 +13,7 @@ from ragbase.config import Config
 
 
 def _load_model_env() -> None:
-    for env_path in (
-        Path(__file__).resolve().parents[1] / ".env",
-        Path(r"D:\A_shixi\universal-knowledge-agent\.env"),
-        Path(r"D:\A_shixi\.env"),
-    ):
-        load_dotenv(env_path, override=False)
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 def create_llm() -> BaseLanguageModel:
