@@ -30,3 +30,14 @@ def test_app_does_not_show_original_ragbase_branding():
     ]
     for value in forbidden:
         assert value not in text
+
+
+def test_published_code_does_not_depend_on_local_machine_paths():
+    root = Path(__file__).resolve().parents[1]
+    checked_files = [root / "app.py", root / "ragbase" / "model.py"]
+
+    for path in checked_files:
+        text = path.read_text(encoding="utf-8")
+        assert "universal-knowledge-agent" not in text
+        assert "D:\\A_shixi" not in text
+        assert "D:/A_shixi" not in text
