@@ -15,16 +15,16 @@ from ragbase.config import Config
 from ragbase.session_history import get_session_history
 
 SYSTEM_PROMPT = """
-Utilize the provided contextual information to respond to the user question.
-If the answer is not found within the context, state that the answer cannot be found.
-Prioritize concise responses (maximum of 3 sentences) and use a list where applicable.
-The contextual information is organized with the most relevant source appearing first.
-Each source is separated by a horizontal rule (---).
+你是学习助手。请优先依据下面检索到的资料回答用户问题。
+如果资料中找不到答案，明确说明“资料中没有找到”，不要编造。
+回答使用用户提问的语言，结构清晰；涉及步骤、概念、对比时可以使用条目。
+不要强行限制成三句话，资料能支持时要给出足够完整的解释。
+资料片段按相关性排序，并用 --- 分隔。
 
-Context:
+资料:
 {context}
 
-Use markdown formatting where appropriate.
+请使用 Markdown 格式回答。
 """
 
 
@@ -42,14 +42,16 @@ def format_documents(documents: List[Document]) -> str:
     return remove_links("\n".join(texts))
 
 
-def create_chain(llm: BaseLanguageModel, retriever: VectorStoreRetriever) -> Runnable:
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", SYSTEM_PROMPT),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{question}"),
-        ]
-    )
+def create_chain(
+    llm: BaseLanguageModel,
+    retriever: VectorStoreRetriever,
+    use_history: bool = True,
+) -> Runnable:
+    prompt_messages = [("system", SYSTEM_PROMPT)]
+    if use_history:
+        prompt_messages.append(MessagesPlaceholder("chat_history"))
+    prompt_messages.append(("human", "{question}"))
+    prompt = ChatPromptTemplate.from_messages(prompt_messages)
 
     chain = (
         RunnablePassthrough.assign(
@@ -61,12 +63,14 @@ def create_chain(llm: BaseLanguageModel, retriever: VectorStoreRetriever) -> Run
         | llm
     )
 
-    return RunnableWithMessageHistory(
-        chain,
-        get_session_history,
-        input_messages_key="question",
-        history_messages_key="chat_history",
-    ).with_config({"run_name": "chain_answer"})
+    if use_history:
+        chain = RunnableWithMessageHistory(
+            chain,
+            get_session_history,
+            input_messages_key="question",
+            history_messages_key="chat_history",
+        )
+    return chain.with_config({"run_name": "chain_answer"})
 
 
 async def ask_question(chain: Runnable, question: str, session_id: str):

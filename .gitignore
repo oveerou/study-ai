@@ -162,5 +162,12 @@ cython_debug/
 #.idea/
 
 .DS_Store
+.vscode/
+.codex*
 docs-db
 tmp
+history/
+knowledge-graphs/
+test-results/
+.streamlit-*.log
+.streamlit-*.err.log

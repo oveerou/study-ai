@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study AI - 多源知识库问答助手</title>
+    <style>
+        /* ========== 全局变量 ========== */
+        :root {
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --bg-card-hover: #1c2333;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-purple: #bc8cff;
+            --accent-orange: #f0883e;
+            --accent-red: #f85149;
+            --accent-cyan: #39d2c0;
+            --radius: 12px;
+            --shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        /* ========== 基础重置 ========== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code {
+            font-family: "JetBrains Mono", "Fira Code", monospace;
+            background: rgba(110,118,129,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        /* ========== 导航栏 ========== */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(13,17,23,0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+            display: flex; align-items: center; justify-content: space-between;
+            height: 60px;
+        }
+        nav .logo { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+        nav .logo span { color: var(--accent); }
+        nav .nav-links { display: flex; gap: 1.5rem; }
+        nav .nav-links a {
+            color: var(--text-muted); font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        nav .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+        /* ========== Hero ========== */
+        .hero {
+            padding: 8rem 2rem 4rem;
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .hero .badge {
+            display: inline-block;
+            background: rgba(88,166,255,0.15);
+            color: var(--accent);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(88,166,255,0.3);
+        }
+        .hero h1 {
+            font-size: 3.2rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            max-width: 650px;
+            margin: 0 auto 2rem;
+        }
+        .hero .actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.7rem 1.6rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-primary:hover { background: #79b8ff; text-decoration: none; }
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { background: var(--bg-card-hover); text-decoration: none; }
+
+        /* ========== 通用 Section ========== */
+        section {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        .section-desc {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+        }
+
+        /* ========== 特性卡片 ========== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.2rem;
+        }
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.8rem;
+            transition: all 0.25s;
+        }
+        .feature-card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+        .feature-card .icon {
+            font-size: 2rem;
+            margin-bottom: 0.8rem;
+        }
+        .feature-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            line-height: 1.6;
+        }
+        .feature-card .tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 0.8rem;
+            font-weight: 600;
+        }
+        .tag-rag { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+        .tag-agent { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
+        .tag-graph { background: rgba(240,136,62,0.15); color: var(--accent-orange); }
+        .tag-ui { background: rgba(57,210,192,0.15); color: var(--accent-cyan); }
+
+        /* ========== 架构图 ========== */
+        .arch-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            overflow-x: auto;
+        }
+        .arch-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+        .arch-box {
+            background: rgba(88,166,255,0.1);
+            border: 1px solid rgba(88,166,255,0.3);
+            border-radius: 8px;
+            padding: 0.8rem 1.2rem;
+            text-align: center;
+            min-width: 120px;
+        }
+        .arch-box .label { font-size: 0.8rem; color: var(--text-muted); }
+        .arch-box .name { font-weight: 700; font-size: 0.95rem; }
+        .arch-arrow {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+        }
+        .arch-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin: 1rem 0;
+        }
+
+        /* ========== 截图展示 ========== */
+        .screenshots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+            gap: 1.5rem;
+        }
+        .screenshot-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: all 0.25s;
+        }
+        .screenshot-card:hover {
+            border-color: var(--accent);
+            box-shadow: var(--shadow);
+        }
+        .screenshot-card img {
+            width: 100%;
+            display: block;
+            border-bottom: 1px solid var(--border);
+        }
+        .screenshot-card .caption {
+            padding: 1rem 1.2rem;
+        }
+        .screenshot-card .caption h4 {
+            font-size: 1rem;
+            margin-bottom: 0.3rem;
+        }
+        .screenshot-card .caption p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* ========== 技术栈 ========== */
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+        .tech-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.2rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        .tech-card .tech-icon {
+            font-size: 1.8rem;
+            flex-shrink: 0;
+        }
+        .tech-card .tech-name { font-weight: 700; font-size: 0.95rem; }
+        .tech-card .tech-desc { color: var(--text-muted); font-size: 0.82rem; margin-top: 0.2rem; }
+
+        /* ========== 快速开始 ========== */
+        .steps {
+            counter-reset: step;
+        }
+        .step {
+            display: flex;
+            gap: 1.2rem;
+            margin-bottom: 1.5rem;
+            align-items: flex-start;
+        }
+        .step-num {
+            counter-increment: step;
+            width: 36px; height: 36px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        .step-num::before { content: counter(step); }
+        .step-content { flex: 1; }
+        .step-content h4 { margin-bottom: 0.3rem; }
+        .step-content p { color: var(--text-muted); font-size: 0.9rem; }
+        .code-block {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.2rem;
+            margin-top: 0.6rem;
+            font-family: "JetBrains Mono", "Fira Code", monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            color: var(--accent-green);
+            line-height: 1.8;
+        }
+
+        /* ========== 目录结构 ========== */
+        .tree {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem 2rem;
+            font-family: "JetBrains Mono", "Fira Code", monospace;
+            font-size: 0.85rem;
+            line-height: 2;
+            color: var(--text-muted);
+        }
+        .tree .dir { color: var(--accent); }
+        .tree .file { color: var(--text); }
+        .tree .comment { color: #6a737d; font-style: italic; }
+
+        /* ========== Footer ========== */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.2rem; }
+            .hero .subtitle { font-size: 1.05rem; }
+            .screenshots-grid { grid-template-columns: 1fr; }
+            nav .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ==================== 导航栏 ==================== -->
+<nav>
+    <div class="logo">Study<span>AI</span></div>
+    <div class="nav-links">
+        <a href="#about">关于</a>
+        <a href="#features">功能</a>
+        <a href="#architecture">架构</a>
+        <a href="#screenshots">演示</a>
+        <a href="#tech">技术栈</a>
+        <a href="#quickstart">快速开始</a>
+    </div>
+</nav>
+
+<!-- ==================== Hero ==================== -->
+<div class="hero">
+    <div class="badge">RAG + Agent + Knowledge Graph</div>
+    <h1>Study AI</h1>
+    <p class="subtitle">
+        本地多源知识库问答助手。支持 PDF / DOCX / 网页 / GitHub / 代码目录导入，
+        基于 Agent 意图规划、混合检索与知识图谱抽取，提供可溯源的精准问答。
+    </p>
+    <div class="actions">
+        <a href="#quickstart" class="btn btn-primary">快速开始</a>
+        <a href="#screenshots" class="btn btn-secondary">查看演示</a>
+    </div>
+</div>
+
+<!-- ==================== 项目缘起 ==================== -->
+<section id="about" style="padding-bottom: 0;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem 2.5rem; position: relative;">
+        <div style="position: absolute; top: -12px; left: 24px; background: var(--bg); padding: 0 10px; color: var(--text-muted); font-size: 0.8rem; letter-spacing: 1px;">ABOUT</div>
+        <p style="font-size: 1.08rem; line-height: 1.9; color: var(--text); margin: 0;">
+            前几月期末复习，想要一个能快速整理资料、精准回答问题、自动生成知识图谱的工具，找了几个开源的感觉总是太蠢缺点智能感，于是自己做了一个 RAG 知识库 Agent，后面又加上了网页抓取、GitHub 仓库索引、本地代码目录和多源数据渠道。
+        </p>
+    </div>
+</section>
+
+<!-- ==================== 核心功能 ==================== -->
+<section id="features">
+    <h2 class="section-title">核心功能</h2>
+    <p class="section-desc">从资料导入到知识图谱，覆盖完整的学习与问答工作流。</p>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="icon">📥</div>
+            <h3>多源资料导入</h3>
+            <p>支持 PDF、DOCX、Markdown、TXT 文件上传，网页 URL 抓取，GitHub 仓库克隆索引，本地代码目录扫描，以及多种来源混合导入。</p>
+            <span class="tag tag-rag">RAG</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="icon">🤖</div>
+            <h3>Agent 意图规划</h3>
+            <p>LLM 驱动的查询理解层，自动识别 5 种意图（闲聊 / 资料清单 / 概览总结 / 全文输出 / 知识问答），智能选择检索范围和来源过滤策略。</p>
+            <span class="tag tag-agent">Agent</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="icon"></div>
+            <h3>向量检索 + 重排序</h3>
+            <p>基于 Qdrant 的向量相似度检索，配合 FlashRank 交叉编码器重排序，以及 LLMChainFilter 语义过滤，确保召回质量。</p>
+            <span class="tag tag-rag">RAG</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="icon">📊</div>
+            <h3>知识图谱生成</h3>
+            <p>从选定资料中自动抽取实体关系三元组，生成交互式知识图谱可视化，支持全屏展示和关系明细表格查看。</p>
+            <span class="tag tag-graph">Graph</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="icon">📎</div>
+            <h3>来源追踪与引用</h3>
+            <p>每个回答都附带精确的来源引用，可展开查看引用片段的文件名、页码和原文内容，杜绝幻觉。</p>
+            <span class="tag tag-rag">RAG</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="icon">💬</div>
+            <h3>对话历史管理</h3>
+            <p>支持多轮对话保存与加载，新建对话时自动归档旧记录并清空索引，保持工作区整洁。</p>
+            <span class="tag tag-ui">UI</span>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 系统架构 ==================== -->
+<section id="architecture">
+    <h2 class="section-title">系统架构</h2>
+    <p class="section-desc">Agent 规划 → 混合检索 → 知识增强的完整 RAG 流水线。</p>
+
+    <div class="arch-container">
+        <!-- 第一层：输入 -->
+        <div class="arch-row">
+            <div class="arch-box">
+                <div class="label">输入</div>
+                <div class="name">用户提问</div>
+            </div>
+        </div>
+        <div class="arch-arrow">↓</div>
+
+        <!-- 第二层：Agent 规划 -->
+        <div class="arch-row">
+            <div class="arch-box" style="border-color: rgba(188,140,255,0.4); background: rgba(188,140,255,0.1);">
+                <div class="label">Agent Planner</div>
+                <div class="name">意图识别 + 来源选择</div>
+            </div>
+        </div>
+        <div class="arch-arrow">↓</div>
+
+        <!-- 第三层：检索 -->
+        <div class="arch-row">
+            <div class="arch-box">
+                <div class="label">Vector Store</div>
+                <div class="name">Qdrant 向量检索</div>
+            </div>
+            <div class="arch-box">
+                <div class="label">Reranker</div>
+                <div class="name">FlashRank 重排序</div>
+            </div>
+            <div class="arch-box">
+                <div class="label">Filter</div>
+                <div class="name">LLMChainFilter</div>
+            </div>
+        </div>
+        <div class="arch-arrow">↓</div>
+
+        <!-- 第四层：生成 -->
+        <div class="arch-row">
+            <div class="arch-box" style="border-color: rgba(63,185,80,0.4); background: rgba(63,185,80,0.1);">
+                <div class="label">LLM Generation</div>
+                <div class="name">Groq / DeepSeek 生成回答</div>
+            </div>
+        </div>
+        <div class="arch-arrow">↓</div>
+
+        <!-- 第五层：输出 -->
+        <div class="arch-row">
+            <div class="arch-box">
+                <div class="label">Output</div>
+                <div class="name">引用回答 + 知识图谱</div>
+            </div>
+        </div>
+
+        <!-- 侧边：知识图谱 -->
+        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dashed var(--border); text-align: center;">
+            <span style="color: var(--text-muted); font-size: 0.9rem;">并行能力：</span>
+            <div class="arch-row" style="margin-top: 0.5rem;">
+                <div class="arch-box" style="border-color: rgba(240,136,62,0.4); background: rgba(240,136,62,0.1);">
+                    <div class="label">Knowledge Graph</div>
+                    <div class="name">LLM 抽取三元组 → 交互式可视化</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 界面演示 ==================== -->
+<section id="screenshots">
+    <h2 class="section-title">界面演示</h2>
+    <p class="section-desc">从资料导入到知识图谱，完整的使用流程。</p>
+
+    <div class="screenshots-grid">
+        <div class="screenshot-card">
+            <img src="images/01-home.png" alt="主界面">
+            <div class="caption">
+                <h4>主界面</h4>
+                <p>左侧资料导入面板，右侧知识库问答区域。支持文件、URL/GitHub、代码目录、混合导入四种方式。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/02-multisource-import.png" alt="多源导入">
+            <div class="caption">
+                <h4>多源导入</h4>
+                <p>支持网页 URL 和 GitHub 仓库直接索引导入，自动抓取和解析内容。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/03-source-ready.png" alt="资料就绪">
+            <div class="caption">
+                <h4>资料就绪</h4>
+                <p>导入完成后显示已索引来源，侧边栏知识图谱区域可选择来源生成图谱。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/04-overview-answer.png" alt="概览回答">
+            <div class="caption">
+                <h4>资料概览问答</h4>
+                <p>Agent 自动识别概览意图，结构化总结资料主题、重点内容和知识体系。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/05-cited-answer.png" alt="引用回答">
+            <div class="caption">
+                <h4>带引用的精准回答</h4>
+                <p>每个回答都标注来源文件和页码，可追溯至原文片段，杜绝大模型幻觉。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/github项目导入和问答.png" alt="GitHub导入">
+            <div class="caption">
+                <h4>GitHub 项目导入问答</h4>
+                <p>直接输入 GitHub 仓库地址，自动克隆、解析代码文件并建立索引，支持对代码库进行自然语言问答。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/知识图谱生成.png" alt="知识图谱生成">
+            <div class="caption">
+                <h4>知识图谱生成</h4>
+                <p>从选定资料中抽取实体关系三元组，生成交互式力导向图，附带关系明细表格。</p>
+            </div>
+        </div>
+
+        <div class="screenshot-card">
+            <img src="images/知识图谱界面.png" alt="知识图谱全屏">
+            <div class="caption">
+                <h4>知识图谱全屏展示</h4>
+                <p>全屏模式下的知识图谱可视化，支持拖拽、缩放、节点高亮等交互操作。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 技术栈 ==================== -->
+<section id="tech">
+    <h2 class="section-title">技术栈</h2>
+    <p class="section-desc">基于主流 AI 工程框架，本地优先，数据不出机器。</p>
+
+    <div class="tech-grid">
+        <div class="tech-card">
+            <div class="tech-icon">️</div>
+            <div>
+                <div class="tech-name">Streamlit</div>
+                <div class="tech-desc">交互式 Web UI 框架，快速构建数据应用</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon"></div>
+            <div>
+                <div class="tech-name">LangChain</div>
+                <div class="tech-desc">LLM 应用编排框架，管理 Chain / Retriever / Agent</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon"></div>
+            <div>
+                <div class="tech-name">Qdrant</div>
+                <div class="tech-desc">高性能向量数据库，支持 HNSW 索引和 Payload 过滤</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon">⚡</div>
+            <div>
+                <div class="tech-name">FastEmbed</div>
+                <div class="tech-desc">轻量级 Embedding 推理引擎，ONNX Runtime 加速</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon">🔀</div>
+            <div>
+                <div class="tech-name">FlashRank</div>
+                <div class="tech-desc">交叉编码器重排序，提升检索结果相关性</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon">🤖</div>
+            <div>
+                <div class="tech-name">Groq / DeepSeek</div>
+                <div class="tech-desc">LLM 推理后端，支持 OpenAI 兼容 API</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon">📄</div>
+            <div>
+                <div class="tech-name">PyPDFium2</div>
+                <div class="tech-desc">PDF 解析引擎，支持多页提取和元数据读取</div>
+            </div>
+        </div>
+        <div class="tech-card">
+            <div class="tech-icon"></div>
+            <div>
+                <div class="tech-name">Poetry + pytest</div>
+                <div class="tech-desc">依赖管理与测试框架，保证代码质量</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 快速开始 ==================== -->
+<section id="quickstart">
+    <h2 class="section-title">快速开始</h2>
+    <p class="section-desc">5 分钟本地部署，无需 Docker。</p>
+
+    <div class="steps">
+        <div class="step">
+            <div class="step-num"></div>
+            <div class="step-content">
+                <h4>克隆项目</h4>
+                <div class="code-block">git clone https://github.com/your-username/study-ai.git<br>cd study-ai</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num"></div>
+            <div class="step-content">
+                <h4>创建虚拟环境并安装依赖</h4>
+                <div class="code-block">python -m venv .venv<br>.venv\Scripts\python.exe -m pip install -r requirements.txt</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num"></div>
+            <div class="step-content">
+                <h4>配置环境变量</h4>
+                <p>复制 <code>.env.example</code> 为 <code>.env</code>，填入你的 LLM API Key（支持 Groq、DeepSeek 等 OpenAI 兼容接口）。</p>
+                <div class="code-block">copy .env.example .env<br># 编辑 .env 填入 OPENAI_API_KEY 和 OPENAI_BASE_URL</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num"></div>
+            <div class="step-content">
+                <h4>启动应用</h4>
+                <div class="code-block">.venv\Scripts\python.exe -m streamlit run app.py --server.port 8501</div>
+                <p>浏览器打开 <code>http://localhost:8501</code> 即可使用。</p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-num"></div>
+            <div class="step-content">
+                <h4>运行测试</h4>
+                <div class="code-block">.venv\Scripts\python.exe -m pytest -q</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 项目结构 ==================== -->
+<section>
+    <h2 class="section-title">项目结构</h2>
+    <p class="section-desc">模块化设计，职责清晰。</p>
+
+    <div class="tree">
+<span class="dir">study-ai/</span><br>
+├── <span class="file">app.py</span>                        <span class="comment"># Streamlit 主界面与交互流程</span><br>
+├── <span class="dir">ragbase/</span><br>
+│   ├── <span class="file">agent_planner.py</span>          <span class="comment"># Agent 意图规划器（5种意图 + 来源选择）</span><br>
+│   ├── <span class="file">agent_responses.py</span>        <span class="comment"># 按意图分发回答生成策略</span><br>
+│   ├── <span class="file">chain.py</span>                  <span class="comment"># LangChain RAG Chain 组装</span><br>
+│   ├── <span class="file">config.py</span>                 <span class="comment"># 全局配置（路径、模型、数据库参数）</span><br>
+│   ├── <span class="file">conversation_store.py</span>     <span class="comment"># 本地对话历史持久化</span><br>
+│   ├── <span class="file">ingestor.py</span>               <span class="comment"># 多源导入器（PDF/URL/GitHub/Code/Mixed）</span><br>
+│   ├── <span class="file">knowledge_graph.py</span>        <span class="comment"># 知识图谱抽取与交互式可视化</span><br>
+│   ├── <span class="file">model.py</span>                  <span class="comment"># LLM / Embedding / Reranker 工厂</span><br>
+│   ├── <span class="file">retriever.py</span>              <span class="comment"># 向量检索 + 来源过滤 + 重排序</span><br>
+│   ├── <span class="file">runtime.py</span>                <span class="comment"># 向量存储生命周期管理</span><br>
+│   ├── <span class="file">session_history.py</span>        <span class="comment"># 会话历史记录管理</span><br>
+│   ├── <span class="file">source_tools.py</span>           <span class="comment"># 资料清单 / 全文 / 概览工具</span><br>
+│   └── <span class="file">uploader.py</span>               <span class="comment"># 文件上传处理</span><br>
+├── <span class="dir">docs/images/</span>                  <span class="comment"># 界面截图</span><br>
+├── <span class="dir">tests/</span>                        <span class="comment"># 回归测试</span><br>
+├── <span class="file">.env.example</span>                  <span class="comment"># 环境变量模板</span><br>
+├── <span class="file">pyproject.toml</span>                <span class="comment"># Poetry 项目配置</span><br>
+└── <span class="file">README.md</span>                     <span class="comment"># 项目说明</span>
+    </div>
+</section>
+
+<!-- ==================== Footer ==================== -->
+<footer>
+    <p>Study AI &mdash; 本地多源知识库问答助手 &mdash; MIT License</p>
+    <p style="margin-top: 0.5rem;">
+        Built with Streamlit + LangChain + Qdrant + FastEmbed + FlashRank
+    </p>
+</footer>
+
+</body>
+</html>

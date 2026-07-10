@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "ragbase"
+name = "study-ai"
 version = "0.1.0"
-description = ""
-authors = ["Venelin Valkov <venelin@curiousily.com>"]
+description = "Local multi-source learning assistant with source-grounded RAG"
+authors = []
 license = "MIT"
 readme = "README.md"
 
@@ -22,7 +22,6 @@ langchain-groq = "^0.1.6"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.1"
-jupyterlab = "^4.2.3"
 watchdog = "^4.0.1"
 
 [build-system]

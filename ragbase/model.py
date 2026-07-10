@@ -1,13 +1,36 @@
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from langchain_community.chat_models import ChatOllama
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 
 from ragbase.config import Config
 
 
+def _load_model_env() -> None:
+    for env_path in (
+        Path(__file__).resolve().parents[1] / ".env",
+        Path(r"D:\A_shixi\universal-knowledge-agent\.env"),
+        Path(r"D:\A_shixi\.env"),
+    ):
+        load_dotenv(env_path, override=False)
+
+
 def create_llm() -> BaseLanguageModel:
+    _load_model_env()
+    if os.getenv("OPENAI_API_KEY"):
+        return ChatOpenAI(
+            temperature=Config.Model.TEMPERATURE,
+            model=Config.Model.OPENAI_COMPATIBLE,
+            base_url=Config.Model.OPENAI_BASE_URL,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            max_tokens=Config.Model.MAX_TOKENS,
+        )
     if Config.Model.USE_LOCAL:
         return ChatOllama(
             model=Config.Model.LOCAL_LLM,
