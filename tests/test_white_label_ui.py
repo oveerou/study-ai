@@ -37,7 +37,6 @@ def test_app_does_not_show_original_ragbase_branding():
 
 
 def test_published_code_does_not_depend_on_local_machine_paths():
-    
     root = Path(__file__).resolve().parents[1]
     checked_files = [root / "app.py", root / "ragbase" / "model.py"]
 

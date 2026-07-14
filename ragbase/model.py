@@ -19,7 +19,6 @@ from ragbase.config import Config
 
 
 def _load_model_env() -> None:
-    
     load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
