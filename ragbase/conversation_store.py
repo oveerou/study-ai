@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,7 @@ def save_conversation(
     messages: Sequence[Mapping[str, str]],
     source_names: Sequence[str],
 ) -> Path:
+    
     history_dir.mkdir(parents=True, exist_ok=True)
     safe_session_id = re.sub(r"[^A-Za-z0-9._-]", "_", session_id)
     path = history_dir / f"{safe_session_id}.json"
@@ -38,6 +41,7 @@ def save_conversation(
 
 
 def load_conversation(path: Path) -> dict:
+    
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not payload.get("session_id"):
         raise ValueError(f"invalid conversation file: {path}")
@@ -45,6 +49,7 @@ def load_conversation(path: Path) -> dict:
 
 
 def list_conversations(history_dir: Path) -> list[dict]:
+    
     if not history_dir.exists():
         return []
 
@@ -78,6 +83,7 @@ def list_conversations(history_dir: Path) -> list[dict]:
 
 
 def delete_conversation(history_dir: Path, session_id: str) -> int:
+    
     deleted = 0
     if not history_dir.exists():
         return deleted
@@ -96,6 +102,7 @@ def _conversation_title(
     messages: Sequence[Mapping[str, str]],
     source_names: Sequence[str],
 ) -> str:
+    
     for message in messages:
         if message.get("role") == "user" and str(message.get("content") or "").strip():
             return str(message["content"]).strip().replace("\n", " ")[:60]

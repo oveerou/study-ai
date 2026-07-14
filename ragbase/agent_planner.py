@@ -1,107 +1,241 @@
+
+
+
+
+
+
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from ragbase.planner_schema import (
+    OperationPlan,
+    VALID_OPERATIONS,
+    VALID_READ_MODES,
+    VALID_SOURCE_SCOPES,
+)
+from ragbase.source_registry import SourceRecord
+from ragbase.source_resolver import SourceResolution
 
-VALID_INTENTS = {"chat", "inventory", "overview", "full_text", "grounded_qa"}
-VALID_SCOPES = {"none", "selected", "all"}
-CONTENT_INTENTS = {"overview", "full_text", "grounded_qa"}
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_CHARS = 600
 
-PLANNER_PROMPT = """
-你是知识库问答系统的行动规划器，不负责回答问题。请理解用户真实语义、否定、纠正、简称、错别字、序号和跨轮指代，然后只输出一个 JSON 对象。
+OPERATION_PLANNER_PROMPT = """
+你是知识库系统的行动规划器，只负责选择下一步操作，不回答用户问题。
 
-JSON 字段：
-- intent: chat | inventory | overview | full_text | grounded_qa
-- scope: none | selected | all
-- source_names: 必须逐字复制“可用来源”中“名称”字段的零个或多个完整值
-- standalone_question: 消解“它、这个、最后一个”等指代后的独立问题
-- reason: 一句简短理由
+只允许四种操作：
+- chat：与资料无关的普通对话。
+- list_sources：列出当前导入的来源名称和数量。
+- read_source：阅读来源概览或完整正文；read_mode 只能是 overview 或 full_text。
+- search：根据资料回答事实、概念、比较、步骤等问题。
 
-决策原则：
-1. chat 用于寒暄或与资料无关的普通对话。
-2. inventory 用于询问来源名称、数量或清单，不回答资料正文。
-3. overview 用于总结一个或多个来源主要讲什么。
-4. full_text 只用于用户确实要查看原文、全文或不省略的内容。
-5. grounded_qa 用于根据资料回答事实、概念、比较、步骤等问题。
-6. 只有用户肯定且明确要求全部来源时 scope 才是 all。否定“全部/所有”表示不能选择 all。
-7. 用户纠正目标来源或只补充文件名时，结合“当前来源”和“上一个内容动作”继承其未完成意图。
-8. 用户明确提到名称、简称、序号、首个、末个或当前文件时，选择对应来源并使用 scope=selected。
-9. 用户比较、关联或综合多个来源时，source_names 必须包含比较各方；如果一方是当前来源，也必须把当前来源和新提到的来源一起列出。
-10. 当前来源只用于有指代、省略或明显延续关系的追问。完整独立的新问题代表可能已经切换主题，不能仅因为存在当前来源就继续锁定它；应根据问题与来源名称重新选择，无法确定单一来源时使用 scope=all。
-11. 不得编造来源名称；不确定时 source_names 留空，由执行器使用当前来源。
-12. 不要输出 Markdown、解释或 JSON 之外的任何文字。
+选择规则：
+- 问题针对具体概念、术语、方法、定义、比较、原因或步骤时，必须选择 search，即使用户同时提到了某份文件。
+- 只有用户询问整份来源整体讲什么时，才选择 read_source + overview。
+- 只有用户明确要求全文、原文、逐字内容或不省略输出时，才选择 read_source + full_text。
+
+source_ids 只能逐字复制“解析器候选”中的 ID，不得编造。没有明确候选时留空。
+scope 表示来源范围：selected 用于明确提到的候选来源；active 只用于明显承接上一轮的追问；all 用于综合全部资料或没有来源指代的独立资料问题；none 用于 chat 和 list_sources。
+当 operation=search 时，query 必须是消解指代后的独立检索问题；其他操作的 query 原样保留当前问题。
+只输出 JSON 对象，字段为 operation、scope、source_ids、query、confidence、read_mode、reason。
+不要输出 Markdown 或 JSON 之外的文字。
 """.strip()
 
-
-@dataclass(frozen=True)
-class AgentPlan:
-    intent: str
-    scope: str
-    source_names: tuple[str, ...]
-    standalone_question: str
-    reason: str = ""
-
-
-def requires_source_selection(plan: AgentPlan) -> bool:
-    return plan.scope == "selected" and plan.intent != "chat" and not plan.source_names
-
-
-def next_active_sources(current_sources: Sequence[str], plan: AgentPlan) -> list[str]:
-    if plan.scope == "selected":
-        return list(plan.source_names)
-    if plan.scope == "all":
-        return []
-    return list(current_sources)
-
-
-async def plan_question(
+async def plan_operation(
     model: Any,
     question: str,
     recent_messages: Sequence[Mapping[str, str]],
-    source_names: Sequence[str],
-    active_source_names: Sequence[str],
-    last_content_intent: str | None,
-) -> AgentPlan:
-    catalog_size = len(source_names)
+    source_records: Sequence[SourceRecord],
+    resolution: SourceResolution,
+    active_source_ids: Sequence[str] = (),
+) -> OperationPlan:
+    
+
+    catalog_ids = {record.source_id for record in source_records}
+    candidate_ids = {
+        candidate.source_id
+        for candidate in resolution.candidates
+        if candidate.source_id in catalog_ids
+    }
     planner_input = {
         "当前问题": question,
-        "可用来源": [
+        "解析器置信度": resolution.confidence,
+        "解析器候选": [
             {
-                "正序位置": index + 1,
-                "倒序位置": catalog_size - index,
-                "名称": name,
+                "ID": candidate.source_id,
+                "名称": candidate.source_name,
+                "匹配分数": candidate.score,
             }
-            for index, name in enumerate(source_names)
+            for candidate in resolution.candidates
+            if candidate.source_id in catalog_ids
         ],
-        "当前来源": list(active_source_names),
-        "上一个内容动作": last_content_intent,
+        "当前来源ID": [source_id for source_id in active_source_ids if source_id in catalog_ids],
         "最近对话": _compact_history(recent_messages),
     }
     messages = [
-        SystemMessage(content=PLANNER_PROMPT),
+        SystemMessage(content=OPERATION_PLANNER_PROMPT),
         HumanMessage(content=json.dumps(planner_input, ensure_ascii=False, indent=2)),
     ]
     try:
         response = await model.ainvoke(messages)
         payload = _parse_payload(_message_text(response))
-        return _validate_plan(
-            payload=payload,
-            question=question,
-            source_names=source_names,
-            active_source_names=active_source_names,
+        return _validate_operation_plan(
+            payload,
+            question,
+            source_records,
+            resolution,
+            candidate_ids,
+            active_source_ids,
         )
     except Exception:
-        return _fallback_plan(question, source_names, active_source_names)
+        return _fallback_operation_plan(
+            question,
+            source_records,
+            active_source_ids,
+            resolution,
+        )
+
+
+def _validate_operation_plan(
+    payload: Mapping[str, Any],
+    question: str,
+    source_records: Sequence[SourceRecord],
+    resolution: SourceResolution,
+    candidate_ids: set[str],
+    active_source_ids: Sequence[str],
+) -> OperationPlan:
+    operation = str(payload.get("operation") or "").strip()
+    if operation not in VALID_OPERATIONS:
+        raise ValueError("invalid planner operation")
+    scope = str(payload.get("scope") or "auto").strip()
+    if scope not in VALID_SOURCE_SCOPES:
+        scope = "auto"
+
+    catalog_ids = tuple(dict.fromkeys(record.source_id for record in source_records))
+    catalog_set = set(catalog_ids)
+    raw_source_ids = payload.get("source_ids") or []
+    if isinstance(raw_source_ids, str):
+        raw_source_ids = [raw_source_ids]
+    selected = tuple(
+        source_id
+        for source_id in dict.fromkeys(str(value).strip() for value in raw_source_ids)
+        if source_id in candidate_ids
+    )
+
+    resolved_ids = tuple(
+        source_id
+        for source_id in dict.fromkeys(resolution.source_ids)
+        if source_id in catalog_set
+    )
+    if resolved_ids:
+        selected = resolved_ids
+        scope = "selected"
+    elif candidate_ids and not selected:
+        
+        
+        scope = "selected"
+
+    read_mode = str(payload.get("read_mode") or "").strip() or None
+    if operation in {"chat", "list_sources"}:
+        selected = ()
+        read_mode = None
+        scope = "none"
+    elif operation == "read_source":
+        read_mode = read_mode if read_mode in VALID_READ_MODES else "overview"
+    else:
+        read_mode = None
+
+    raw_query = str(payload.get("query") or "").strip()
+    query = raw_query if operation == "search" and raw_query else question
+
+    if operation in {"read_source", "search"} and scope == "all":
+        selected = catalog_ids
+    elif operation in {"read_source", "search"} and scope == "active":
+        active = tuple(
+            source_id
+            for source_id in dict.fromkeys(active_source_ids)
+            if source_id in catalog_set
+        )
+        selected = active or catalog_ids
+    
+    elif operation in {"read_source", "search"} and not selected and not candidate_ids:
+        selected = catalog_ids
+        scope = "all"
+
+    try:
+        confidence = float(payload.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = min(1.0, max(0.0, confidence))
+    return OperationPlan(
+        operation=operation,
+        source_ids=selected,
+        query=query,
+        confidence=confidence,
+        reason=str(payload.get("reason") or "").strip(),
+        read_mode=read_mode,
+        scope=scope,
+    )
+
+
+def _fallback_operation_plan(
+    question: str,
+    source_records: Sequence[SourceRecord],
+    active_source_ids: Sequence[str],
+    resolution: SourceResolution | None = None,
+) -> OperationPlan:
+    catalog_ids = tuple(dict.fromkeys(record.source_id for record in source_records))
+    catalog_set = set(catalog_ids)
+    active = tuple(
+        source_id
+        for source_id in dict.fromkeys(active_source_ids)
+        if source_id in catalog_set
+    )
+    resolved = tuple(
+        source_id
+        for source_id in dict.fromkeys(resolution.source_ids if resolution else ())
+        if source_id in catalog_set
+    )
+    ambiguous_candidates = tuple(
+        candidate.source_id
+        for candidate in (resolution.candidates if resolution else ())
+        if candidate.source_id in catalog_set
+    )
+    if not catalog_ids:
+        return OperationPlan("chat", (), question, 0.0, "planner fallback without sources")
+    if resolved:
+        return OperationPlan(
+            "search",
+            resolved,
+            question,
+            0.0,
+            "planner fallback on resolved sources",
+            scope="selected",
+        )
+    if ambiguous_candidates:
+        return OperationPlan(
+            "search",
+            (),
+            question,
+            0.0,
+            "planner fallback awaiting source selection",
+            scope="selected",
+        )
+    return OperationPlan(
+        "search",
+        active or catalog_ids,
+        question,
+        0.0,
+        "planner fallback on available sources",
+    )
 
 
 def _compact_history(messages: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    
     compacted = []
     for message in messages[-MAX_HISTORY_MESSAGES:]:
         role = str(message.get("role") or "")
@@ -111,6 +245,7 @@ def _compact_history(messages: Sequence[Mapping[str, str]]) -> list[dict[str, st
 
 
 def _message_text(message: Any) -> str:
+    
     content = getattr(message, "content", message)
     if isinstance(content, str):
         return content
@@ -123,6 +258,7 @@ def _message_text(message: Any) -> str:
 
 
 def _parse_payload(text: str) -> dict:
+    
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
     start = cleaned.find("{")
     end = cleaned.rfind("}")
@@ -132,71 +268,3 @@ def _parse_payload(text: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("planner JSON must be an object")
     return payload
-
-
-def _validate_plan(
-    payload: Mapping[str, Any],
-    question: str,
-    source_names: Sequence[str],
-    active_source_names: Sequence[str],
-) -> AgentPlan:
-    intent = str(payload.get("intent") or "").strip()
-    scope = str(payload.get("scope") or "").strip()
-    if intent not in VALID_INTENTS or scope not in VALID_SCOPES:
-        raise ValueError("invalid planner action")
-
-    catalog = list(dict.fromkeys(str(name) for name in source_names))
-    catalog_lookup = {name.casefold(): name for name in catalog}
-    selected = []
-    raw_names = payload.get("source_names") or []
-    if isinstance(raw_names, str):
-        raw_names = [raw_names]
-    for raw_name in raw_names:
-        valid_name = catalog_lookup.get(str(raw_name).strip().casefold())
-        if valid_name and valid_name not in selected:
-            selected.append(valid_name)
-
-    if intent == "chat":
-        scope = "none"
-        selected = []
-    elif scope == "all":
-        selected = catalog
-    elif scope == "selected" and not selected:
-        selected = [name for name in active_source_names if name in catalog]
-        if not selected and len(catalog) == 1:
-            selected = catalog.copy()
-
-    standalone_question = str(payload.get("standalone_question") or question).strip() or question
-    return AgentPlan(
-        intent=intent,
-        scope=scope,
-        source_names=tuple(selected),
-        standalone_question=standalone_question,
-        reason=str(payload.get("reason") or "").strip(),
-    )
-
-
-def _fallback_plan(
-    question: str,
-    source_names: Sequence[str],
-    active_source_names: Sequence[str],
-) -> AgentPlan:
-    catalog = list(dict.fromkeys(str(name) for name in source_names))
-    selected = [name for name in active_source_names if name in catalog]
-    if not catalog:
-        return AgentPlan("chat", "none", (), question, "planner fallback without sources")
-    if selected:
-        return AgentPlan(
-            "grounded_qa",
-            "selected",
-            tuple(selected),
-            question,
-            "planner fallback on active sources",
-        )
-    return AgentPlan(
-        "grounded_qa",
-        "all",
-        tuple(catalog),
-        question,
-        "planner fallback on all sources",
-    )

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "partial-outline-name",
+      "category": "source_resolution",
+      "query": "复习大纲那份主要说啥",
+      "expected_sources": ["outline"],
+      "minimum_confidence": 0.95,
+      "tags": ["partial_filename"]
+    },
+    {
+      "id": "outline-name-with-typo",
+      "category": "source_resolution",
+      "query": "复习大钢里考啥",
+      "expected_sources": ["outline"],
+      "minimum_confidence": 0.7,
+      "tags": ["filename_typo"]
+    },
+    {
+      "id": "third-source-by-ordinal",
+      "category": "source_resolution",
+      "query": "第三份资料最后一条是什么",
+      "expected_sources": ["outline"],
+      "minimum_confidence": 1.0,
+      "tags": ["ordinal_reference"]
+    },
+    {
+      "id": "active-source-pronoun",
+      "category": "source_resolution",
+      "query": "它后面还列了哪些考点",
+      "active_sources": ["outline"],
+      "expected_sources": ["outline"],
+      "minimum_confidence": 0.9,
+      "tags": ["active_pronoun"]
+    },
+    {
+      "id": "read-every-imported-source",
+      "category": "all_source_read",
+      "query": "把这些资料的内容都给我看看",
+      "expected_sources": ["intro", "system", "outline", "enhancement"],
+      "tags": ["all_sources"]
+    },
+    {
+      "id": "recall-psnr",
+      "category": "retrieval",
+      "query": "峰值信噪比 PSNR 在复习里要求掌握什么",
+      "expected_source": "outline",
+      "expected_terms": ["图像质量评价指标", "PSNR"],
+      "tags": ["exact_term"]
+    },
+    {
+      "id": "recall-dm-distance",
+      "category": "retrieval",
+      "query": "像素距离里面有没有 Dm 距离",
+      "expected_source": "outline",
+      "expected_terms": ["D4", "D8", "Dm 距离"],
+      "tags": ["exact_term"]
+    },
+    {
+      "id": "recall-canny",
+      "category": "retrieval",
+      "query": "边缘检测的 Canny 算法是第几个考点",
+      "expected_source": "outline",
+      "expected_terms": ["27. Canny 算法"],
+      "tags": ["exact_term"]
+    },
+    {
+      "id": "recall-otsu-with-colloquial-name",
+      "category": "retrieval",
+      "query": "大津法是不是复习重点",
+      "expected_source": "outline",
+      "expected_terms": ["大津阈值法", "Otsu"],
+      "tags": ["exact_term"]
+    },
+    {
+      "id": "recall-feature-descriptors",
+      "category": "retrieval",
+      "query": "SIFT、LBP、HOG 这些描述子在哪一项",
+      "expected_source": "outline",
+      "expected_terms": ["SIFT", "LBP", "HOG"],
+      "tags": ["exact_term"]
+    },
+    {
+      "id": "recall-last-outline-item",
+      "category": "retrieval",
+      "query": "最后还考了什么前沿方向",
+      "expected_source": "outline",
+      "expected_terms": ["42. 计算机视觉技术的前沿和发展趋势"],
+      "tags": ["exact_term", "last_numbered_item"]
+    },
+    {
+      "id": "irrelevant-pet-query",
+      "category": "irrelevant",
+      "query": "猫咪疫苗预约",
+      "expected_sources": [],
+      "tags": ["irrelevant"]
+    }
+  ]
+}

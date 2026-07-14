@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import json
@@ -12,6 +14,7 @@ from ragbase.conversation_store import (
 
 
 def test_save_conversation_upserts_one_local_file(tmp_path: Path):
+    
     history_dir = tmp_path / "history"
 
     first_path = save_conversation(
@@ -38,6 +41,7 @@ def test_save_conversation_upserts_one_local_file(tmp_path: Path):
 
 
 def test_list_conversations_reads_legacy_archives_and_deduplicates_session(tmp_path: Path):
+    
     history_dir = tmp_path / "history"
     history_dir.mkdir()
     legacy = {
@@ -68,6 +72,7 @@ def test_list_conversations_reads_legacy_archives_and_deduplicates_session(tmp_p
 
 
 def test_delete_conversation_removes_stable_and_legacy_files(tmp_path: Path):
+    
     history_dir = tmp_path / "history"
     stable_path = save_conversation(
         history_dir,

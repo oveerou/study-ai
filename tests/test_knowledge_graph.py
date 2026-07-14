@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +33,7 @@ class FailingGraphModel:
 
 
 def test_extract_knowledge_graph_validates_triples_and_sources():
+    
     model = FakeGraphModel(
         {
             "triples": [
@@ -68,6 +71,7 @@ def test_extract_knowledge_graph_validates_triples_and_sources():
 
 
 def test_extract_knowledge_graph_falls_back_when_model_connection_fails():
+    
     profiles = [
         {
             "name": "course.pdf",
@@ -92,6 +96,7 @@ def test_extract_knowledge_graph_falls_back_when_model_connection_fails():
 
 
 def test_knowledge_graph_round_trips_to_local_json(tmp_path: Path):
+    
     graph = {
         "source_names": ["course.pdf"],
         "triples": [
@@ -112,6 +117,7 @@ def test_knowledge_graph_round_trips_to_local_json(tmp_path: Path):
 
 
 def test_graph_to_dot_escapes_labels():
+    
     graph = {
         "triples": [
             {
@@ -130,6 +136,7 @@ def test_graph_to_dot_escapes_labels():
 
 
 def test_graph_to_interactive_html_embeds_graph_browser_controls():
+    
     graph = {
         "triples": [
             {"subject": "A", "predicate": "rel", "object": "B", "source_name": "one.pdf"},
@@ -152,6 +159,7 @@ def test_graph_to_interactive_html_embeds_graph_browser_controls():
 
 
 def test_graph_to_interactive_html_can_show_all_components_and_fullscreen():
+    
     graph = {
         "triples": [
             {"subject": "A", "predicate": "rel", "object": "B", "source_name": "one.pdf"},

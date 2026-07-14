@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import json
@@ -5,6 +7,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 
+from ragbase import runtime
 from ragbase.runtime import archive_conversation, close_vector_store
 
 
@@ -14,6 +17,7 @@ class _VectorStore:
 
 
 def test_close_vector_store_releases_local_qdrant_lock(tmp_path: Path):
+    
     database_dir = tmp_path / "docs-db"
     first_client = QdrantClient(path=str(database_dir))
 
@@ -23,7 +27,22 @@ def test_close_vector_store_releases_local_qdrant_lock(tmp_path: Path):
     second_client.close()
 
 
+def test_reset_index_storage_recreates_an_empty_directory(tmp_path: Path):
+    
+    database_dir = tmp_path / "docs-db"
+    database_dir.mkdir()
+    (database_dir / "stale.lock").write_text("old", encoding="utf-8")
+
+    reset_index_storage = getattr(runtime, "reset_index_storage", None)
+
+    assert callable(reset_index_storage)
+    reset_index_storage(database_dir)
+    assert database_dir.is_dir()
+    assert list(database_dir.iterdir()) == []
+
+
 def test_archive_conversation_writes_messages_and_sources(tmp_path: Path):
+    
     archive_path = archive_conversation(
         history_dir=tmp_path / "history",
         session_id="session-123",
@@ -42,6 +61,7 @@ def test_archive_conversation_writes_messages_and_sources(tmp_path: Path):
 
 
 def test_archive_conversation_skips_unused_blank_session(tmp_path: Path):
+    
     archive_path = archive_conversation(
         history_dir=tmp_path / "history",
         session_id="blank-session",

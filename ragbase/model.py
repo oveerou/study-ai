@@ -1,3 +1,9 @@
+
+
+
+
+
+
 import os
 from pathlib import Path
 
@@ -13,10 +19,12 @@ from ragbase.config import Config
 
 
 def _load_model_env() -> None:
+    
     load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 def create_llm() -> BaseLanguageModel:
+    
     _load_model_env()
     if os.getenv("OPENAI_API_KEY"):
         return ChatOpenAI(
@@ -42,8 +50,10 @@ def create_llm() -> BaseLanguageModel:
 
 
 def create_embeddings() -> FastEmbedEmbeddings:
+    
     return FastEmbedEmbeddings(model_name=Config.Model.EMBEDDINGS)
 
 
 def create_reranker() -> FlashrankRerank:
+    
     return FlashrankRerank(model=Config.Model.RERANKER)

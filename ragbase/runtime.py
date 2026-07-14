@@ -1,12 +1,16 @@
+
+
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
 def close_vector_store(vector_store: Any | None) -> None:
+    
     if vector_store is None:
         return
     client = getattr(vector_store, "client", None)
@@ -15,12 +19,19 @@ def close_vector_store(vector_store: Any | None) -> None:
         close()
 
 
+def reset_index_storage(database_dir: Path) -> None:
+    
+    shutil.rmtree(database_dir, ignore_errors=True)
+    database_dir.mkdir(parents=True, exist_ok=True)
+
+
 def archive_conversation(
     history_dir: Path,
     session_id: str,
     messages: Sequence[Mapping[str, str]],
     source_names: Sequence[str],
 ) -> Path | None:
+    
     has_user_message = any(message.get("role") == "user" for message in messages)
     if not source_names and not has_user_message:
         return None

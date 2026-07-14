@@ -1,8 +1,13 @@
+
+
+
+
+
+
 from __future__ import annotations
 
 import html
 import re
-import shutil
 import zipfile
 from pathlib import Path
 from typing import Iterable, List
@@ -12,10 +17,9 @@ from langchain_community.document_loaders import PyPDFium2Loader
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-from langchain_experimental.text_splitter import SemanticChunker
 from langchain_qdrant import Qdrant
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from ragbase.chunking import ChunkingRouter, EmbeddingTokenizer
 from ragbase.config import Config
 
 
@@ -50,6 +54,7 @@ MAX_CODE_FILE_BYTES = 1_000_000
 
 
 def load_path_documents(path: str | Path) -> list[Document]:
+    
     source_path = Path(path)
     suffix = source_path.suffix.lower()
     if suffix == ".pdf":
@@ -82,6 +87,7 @@ def load_path_documents(path: str | Path) -> list[Document]:
 
 
 def load_url_documents(url: str) -> list[Document]:
+    
     import requests
 
     url = url.strip()
@@ -114,6 +120,7 @@ def load_url_documents(url: str) -> list[Document]:
 
 
 def load_code_dir_documents(dir_path: str | Path) -> list[Document]:
+    
     root = Path(dir_path)
     if not root.exists() or not root.is_dir():
         raise ValueError(f"代码目录不存在: {root}")
@@ -145,6 +152,7 @@ def load_code_dir_documents(dir_path: str | Path) -> list[Document]:
 
 
 def load_mixed_documents(items: Iterable[str]) -> list[Document]:
+    
     docs: list[Document] = []
     for raw_item in items:
         item = (raw_item or "").strip()
@@ -164,6 +172,7 @@ def load_mixed_documents(items: Iterable[str]) -> list[Document]:
 
 
 def source_names_from_documents(documents: Iterable[Document]) -> list[str]:
+    
     names: list[str] = []
     for doc in documents:
         name = str(doc.metadata.get("source_name") or doc.metadata.get("source") or "未命名来源")
@@ -173,35 +182,35 @@ def source_names_from_documents(documents: Iterable[Document]) -> list[str]:
 
 
 class Ingestor:
+    
+
     def __init__(self):
+        
         self.embeddings = FastEmbedEmbeddings(model_name=Config.Model.EMBEDDINGS)
-        self.semantic_splitter = SemanticChunker(
-            self.embeddings, breakpoint_threshold_type="interquartile"
+        tokenizer = EmbeddingTokenizer(
+            tokenizer=self.embeddings._model.model.tokenizer
         )
-        self.recursive_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2048,
-            chunk_overlap=128,
-            add_start_index=True,
-        )
+        self.chunking_router = ChunkingRouter(tokenizer=tokenizer)
+        self.chunk_documents: list[Document] = []
 
     def ingest(self, doc_paths: List[Path]) -> VectorStore:
+        
         documents: list[Document] = []
         for doc_path in doc_paths:
             documents.extend(load_path_documents(doc_path))
         return self.ingest_documents(documents)
 
     def ingest_documents(self, source_documents: list[Document]) -> VectorStore:
+        
         if not source_documents:
             raise ValueError("没有解析到可索引内容")
 
-        shutil.rmtree(Config.Path.DATABASE_DIR, ignore_errors=True)
-        Config.Path.DATABASE_DIR.mkdir(parents=True, exist_ok=True)
-
         documents = []
-        split_documents = self.recursive_splitter.split_documents(source_documents)
+        split_documents = self.chunking_router.split_documents(source_documents)
         for doc in split_documents:
             if (doc.page_content or "").strip():
                 documents.append(doc)
+        self.chunk_documents = documents
 
         return Qdrant.from_documents(
             documents=documents,
@@ -212,6 +221,7 @@ class Ingestor:
 
 
 def _read_docx_text(path: Path) -> str:
+    
     try:
         with zipfile.ZipFile(path) as archive:
             raw_xml = archive.read("word/document.xml").decode("utf-8", errors="ignore")
@@ -224,6 +234,7 @@ def _read_docx_text(path: Path) -> str:
 
 
 def _html_to_text(raw: str) -> str:
+    
     raw = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", raw)
     raw = re.sub(r"(?s)<br\s*/?>", "\n", raw)
     raw = re.sub(r"(?s)</(p|div|h[1-6]|li|tr)>", "\n", raw)
@@ -231,10 +242,12 @@ def _html_to_text(raw: str) -> str:
 
 
 def _strip_tags(raw: str) -> str:
+    
     return re.sub(r"(?s)<[^>]+>", " ", raw)
 
 
 def _github_readme_candidates(url: str) -> list[str]:
+    
     parsed = urlparse(url)
     if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
         return []

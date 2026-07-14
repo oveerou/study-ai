@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import json
@@ -15,6 +17,7 @@ MAX_TRIPLES = 80
 
 
 async def extract_knowledge_graph(model: Any, source_profiles: Sequence[dict]) -> dict:
+    
     source_names = [str(profile.get("name")) for profile in source_profiles]
     context_parts = []
     used_chars = 0
@@ -63,6 +66,7 @@ async def extract_knowledge_graph(model: Any, source_profiles: Sequence[dict]) -
 
 
 def _normalize_model_triples(payload: dict, source_names: Sequence[str]) -> list[dict]:
+    
     triples = []
     for raw in payload.get("triples") or []:
         if not isinstance(raw, dict):
@@ -87,6 +91,7 @@ def _normalize_model_triples(payload: dict, source_names: Sequence[str]) -> list
 
 
 def _fallback_extract_triples(source_profiles: Sequence[dict]) -> list[dict]:
+    
     triples: list[dict] = []
     seen: set[tuple[str, str, str, str]] = set()
     for profile in source_profiles:
@@ -113,6 +118,7 @@ def _fallback_extract_triples(source_profiles: Sequence[dict]) -> list[dict]:
 
 
 def save_knowledge_graph(graph_dir: Path, session_id: str, graph: dict) -> Path:
+    
     graph_dir.mkdir(parents=True, exist_ok=True)
     safe_session_id = re.sub(r"[^A-Za-z0-9._-]", "_", session_id)
     path = graph_dir / f"{safe_session_id}.json"
@@ -126,6 +132,7 @@ def save_knowledge_graph(graph_dir: Path, session_id: str, graph: dict) -> Path:
 
 
 def load_knowledge_graph(path: Path) -> dict:
+    
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("triples"), list):
         raise ValueError(f"invalid knowledge graph file: {path}")
@@ -133,6 +140,7 @@ def load_knowledge_graph(path: Path) -> dict:
 
 
 def _candidate_statements(text: str) -> list[str]:
+    
     normalized = re.sub(r"[ \t]+", " ", text)
     lines = []
     for raw_line in re.split(r"[\n。；;]", normalized):
@@ -144,6 +152,7 @@ def _candidate_statements(text: str) -> list[str]:
 
 
 def _triples_from_statement(statement: str, source_name: str) -> list[dict]:
+    
     patterns = [
         (r"(.{2,40}?)(?:的)?作用是(.{2,60})", "作用是"),
         (r"(.{2,40}?)(?:的)?定义是(.{2,60})", "定义是"),
@@ -183,12 +192,14 @@ def _triples_from_statement(statement: str, source_name: str) -> list[dict]:
 
 
 def _clean_entity(value: str) -> str:
+    
     value = re.sub(r"\s+", " ", str(value or "")).strip(" ：:，,。.；;（）()[]【】")
     value = re.sub(r"^(其中|例如|如|以及|和|与|及)", "", value)
     return value[:50].strip()
 
 
 def graph_to_interactive_html(graph: dict) -> str:
+    
     triples = list(graph.get("triples") or [])
 
     nodes = _graph_nodes(triples)
@@ -632,6 +643,7 @@ setTimeout(() => network.fit({{ animation: true }}), 400);
 
 
 def graph_to_dot(graph: dict) -> str:
+    
     labels = []
     for triple in graph.get("triples") or []:
         for key in ("subject", "object"):
@@ -660,6 +672,7 @@ def graph_to_dot(graph: dict) -> str:
 
 
 def _parse_json(text: str) -> dict:
+    
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
     start = cleaned.find("{")
     end = cleaned.rfind("}")
@@ -672,15 +685,18 @@ def _parse_json(text: str) -> dict:
 
 
 def _message_text(message: Any) -> str:
+    
     content = getattr(message, "content", message)
     return content if isinstance(content, str) else str(content)
 
 
 def _dot_escape(value: str) -> str:
+    
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
 
 
 def _graph_nodes(triples: Sequence[dict]) -> list[dict]:
+    
     labels = []
     degree: dict[str, int] = {}
     first_seen: dict[str, int] = {}
@@ -726,6 +742,7 @@ def _graph_nodes(triples: Sequence[dict]) -> list[dict]:
 
 
 def _graph_edges(triples: Sequence[dict], nodes: Sequence[dict]) -> list[dict]:
+    
     node_ids = {str(node["label"]): str(node["id"]) for node in nodes}
     edges = []
     for index, triple in enumerate(triples):

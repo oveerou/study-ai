@@ -1,3 +1,9 @@
+
+
+
+
+
+
 from __future__ import annotations
 
 import asyncio
@@ -13,14 +19,8 @@ from dotenv import load_dotenv
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
-from ragbase.agent_planner import (
-    CONTENT_INTENTS,
-    next_active_sources,
-    plan_question,
-    requires_source_selection,
-)
-from ragbase.agent_responses import generate_chat_answer, generate_overview_answer, select_source_profiles
-from ragbase.chain import ask_question, create_chain
+from ragbase.agent_responses import select_source_profiles
+from ragbase.chain import create_chain
 from ragbase.config import Config
 from ragbase.conversation_store import (
     delete_conversation,
@@ -34,7 +34,6 @@ from ragbase.ingestor import (
     load_mixed_documents,
     load_path_documents,
     load_url_documents,
-    source_names_from_documents,
 )
 from ragbase.knowledge_graph import (
     extract_knowledge_graph,
@@ -42,10 +41,12 @@ from ragbase.knowledge_graph import (
     save_knowledge_graph,
 )
 from ragbase.model import create_llm
+from ragbase.orchestrator import OrchestratorRuntime, execute_question
 from ragbase.retriever import create_retriever
-from ragbase.runtime import close_vector_store
+from ragbase.runtime import close_vector_store, reset_index_storage
 from ragbase.session_history import drop_session_history
-from ragbase.source_tools import build_source_profiles, format_source_full_text, format_source_inventory
+from ragbase.source_registry import attach_source_records, build_source_records
+from ragbase.source_tools import build_source_profiles
 from ragbase.uploader import upload_files
 
 
@@ -86,15 +87,14 @@ st.markdown(
 
 
 def clear_runtime_sources() -> None:
-    for path in (Config.Path.DATABASE_DIR, Config.Path.DOCUMENTS_DIR):
-        try:
-            shutil.rmtree(path)
-        except FileNotFoundError:
-            pass
-        path.mkdir(parents=True, exist_ok=True)
+    
+    reset_index_storage(Config.Path.DATABASE_DIR)
+    shutil.rmtree(Config.Path.DOCUMENTS_DIR, ignore_errors=True)
+    Config.Path.DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def release_runtime_index() -> None:
+    
     st.session_state.chain = None
     vector_store = st.session_state.get("vector_store")
     st.session_state.vector_store = None
@@ -103,17 +103,21 @@ def release_runtime_index() -> None:
 
 
 def reset_source_inputs() -> None:
+    
     st.session_state[SOURCE_INPUT_KEY] = st.session_state.get(SOURCE_INPUT_KEY, 0) + 1
 
 
 def source_widget_key(name: str) -> str:
+    
     return f"{name}_{st.session_state.get(SOURCE_INPUT_KEY, 0)}"
 
 
 def init_state() -> None:
+    
     if SOURCE_INPUT_KEY not in st.session_state:
         st.session_state[SOURCE_INPUT_KEY] = 0
     if "runtime_sources_initialized" not in st.session_state:
+        release_runtime_index()
         clear_runtime_sources()
         st.session_state.runtime_sources_initialized = True
     if "messages" not in st.session_state:
@@ -125,6 +129,10 @@ def init_state() -> None:
         ]
     if "source_names" not in st.session_state:
         st.session_state.source_names = []
+    if "source_records" not in st.session_state:
+        st.session_state.source_records = []
+    if "chunk_documents" not in st.session_state:
+        st.session_state.chunk_documents = []
     if "source_profiles" not in st.session_state:
         st.session_state.source_profiles = []
     if "last_documents" not in st.session_state:
@@ -137,6 +145,8 @@ def init_state() -> None:
         st.session_state.llm = None
     if "active_source_names" not in st.session_state:
         st.session_state.active_source_names = []
+    if "active_source_ids" not in st.session_state:
+        st.session_state.active_source_ids = []
     if "last_content_intent" not in st.session_state:
         st.session_state.last_content_intent = None
     if "viewing_history" not in st.session_state:
@@ -150,6 +160,7 @@ def init_state() -> None:
 
 
 def persist_current_conversation() -> Path | None:
+    
     if st.session_state.viewing_history:
         return None
     has_user_message = any(message.get("role") == "user" for message in st.session_state.messages)
@@ -164,11 +175,13 @@ def persist_current_conversation() -> Path | None:
 
 
 def record_message(role: str, content: str) -> None:
+    
     st.session_state.messages.append({"role": role, "content": content})
     persist_current_conversation()
 
 
 def reset_chat() -> None:
+    
     old_session_id = st.session_state.session_id
     persist_current_conversation()
     release_runtime_index()
@@ -176,9 +189,12 @@ def reset_chat() -> None:
     clear_runtime_sources()
     reset_source_inputs()
     st.session_state.source_names = []
+    st.session_state.source_records = []
+    st.session_state.chunk_documents = []
     st.session_state.source_profiles = []
     st.session_state.last_documents = []
     st.session_state.active_source_names = []
+    st.session_state.active_source_ids = []
     st.session_state.last_content_intent = None
     st.session_state.viewing_history = False
     st.session_state.history_source_names = []
@@ -193,14 +209,18 @@ def reset_chat() -> None:
 
 
 def clear_sources() -> None:
+    
     persist_current_conversation()
     release_runtime_index()
     clear_runtime_sources()
     reset_source_inputs()
     st.session_state.source_names = []
+    st.session_state.source_records = []
+    st.session_state.chunk_documents = []
     st.session_state.source_profiles = []
     st.session_state.last_documents = []
     st.session_state.active_source_names = []
+    st.session_state.active_source_ids = []
     st.session_state.last_content_intent = None
     st.session_state.viewing_history = False
     st.session_state.history_source_names = []
@@ -215,28 +235,39 @@ def clear_sources() -> None:
 
 
 def build_chain_from_documents(documents):
-    vector_store = Ingestor().ingest_documents(documents)
+    
+    ingestor = Ingestor()
+    vector_store = ingestor.ingest_documents(documents)
+    chunk_documents = list(ingestor.chunk_documents)
     try:
         llm = create_llm()
-        retriever = create_retriever(llm, vector_store=vector_store)
+        retriever = create_retriever(
+            llm,
+            vector_store=vector_store,
+            chunk_documents=chunk_documents,
+        )
         chain = create_chain(llm, retriever)
     except Exception:
         close_vector_store(vector_store)
         raise
-    return chain, vector_store, llm
+    return chain, vector_store, llm, chunk_documents
 
 
 def index_documents(documents, success_prefix: str) -> bool:
+    
     documents = [doc for doc in documents if (doc.page_content or "").strip()]
     if not documents:
         st.warning("没有解析到可索引内容。")
         return False
 
-    names = source_names_from_documents(documents)
+    source_records = build_source_records(documents, st.session_state.session_id)
+    documents = attach_source_records(documents, source_records)
+    names = [record.source_name for record in source_records]
     try:
         with st.spinner("正在索引资料，请稍等..."):
             release_runtime_index()
-            chain, vector_store, llm = build_chain_from_documents(documents)
+            reset_index_storage(Config.Path.DATABASE_DIR)
+            chain, vector_store, llm, chunk_documents = build_chain_from_documents(documents)
             st.session_state.vector_store = vector_store
             st.session_state.chain = chain
             st.session_state.llm = llm
@@ -245,13 +276,15 @@ def index_documents(documents, success_prefix: str) -> bool:
         return False
 
     st.session_state.source_names = names
+    st.session_state.source_records = source_records
+    st.session_state.chunk_documents = chunk_documents
     st.session_state.source_profiles = build_source_profiles(documents)
+    st.session_state.active_source_ids = [source_records[0].source_id] if len(source_records) == 1 else []
     st.session_state.active_source_names = names.copy() if len(names) == 1 else []
     st.session_state.last_content_intent = None
     st.session_state.viewing_history = False
     st.session_state.history_source_names = []
     st.session_state.knowledge_graph = None
-    st.session_state.session_id = str(uuid.uuid4())
     reset_source_inputs()
     record_message("assistant", f"已导入 {len(names)} 个来源：{', '.join(names)}")
     st.success(f"{success_prefix}完成，已索引 {len(names)} 个来源。")
@@ -259,6 +292,7 @@ def index_documents(documents, success_prefix: str) -> bool:
 
 
 def load_uploaded_documents(uploaded_files):
+    
     shutil.rmtree(Config.Path.DOCUMENTS_DIR, ignore_errors=True)
     file_paths = upload_files(uploaded_files, remove_old_files=False)
     documents = []
@@ -268,6 +302,7 @@ def load_uploaded_documents(uploaded_files):
 
 
 def render_source_controls() -> None:
+    
     st.subheader("资料导入")
     tab_file, tab_url_github, tab_code, tab_mixed = st.tabs(
         ["文件", "URL/GitHub", "代码目录", "混合导入"]
@@ -343,14 +378,18 @@ def render_source_controls() -> None:
 
 
 def open_history_conversation(summary: dict) -> None:
+    
     persist_current_conversation()
     release_runtime_index()
     clear_runtime_sources()
     payload = load_conversation(Path(summary["path"]))
     reset_source_inputs()
     st.session_state.source_names = []
+    st.session_state.source_records = []
+    st.session_state.chunk_documents = []
     st.session_state.source_profiles = []
     st.session_state.active_source_names = []
+    st.session_state.active_source_ids = []
     st.session_state.last_content_intent = None
     st.session_state.last_documents = []
     st.session_state.knowledge_graph = None
@@ -361,6 +400,7 @@ def open_history_conversation(summary: dict) -> None:
 
 
 def render_history_controls() -> None:
+    
     st.subheader("历史对话")
     conversations = list_conversations(Config.Path.HISTORY_DIR)
     if not conversations:
@@ -384,6 +424,7 @@ def render_history_controls() -> None:
 
 
 def render_knowledge_graph_controls() -> None:
+    
     st.subheader("知识图谱")
     if not st.session_state.source_names:
         st.caption("导入资料后可生成。")
@@ -420,6 +461,7 @@ def render_knowledge_graph_controls() -> None:
 
 
 def render_sidebar() -> None:
+    
     with st.sidebar:
         st.title("学习助手")
         st.caption("本地资料问答 · 多源导入 · 来源可追踪")
@@ -454,6 +496,7 @@ def render_sidebar() -> None:
 
 
 def render_empty_state() -> None:
+    
     st.header("知识库问答")
     st.info("左侧导入资料后，这里会进入资料问答模式。")
     st.markdown(
@@ -472,6 +515,7 @@ def render_empty_state() -> None:
 
 
 def render_history_view() -> None:
+    
     st.header("历史对话")
     if st.session_state.history_source_names:
         st.caption("当时使用的资料：" + "、".join(st.session_state.history_source_names))
@@ -480,6 +524,7 @@ def render_history_view() -> None:
 
 
 def render_knowledge_graph_view() -> None:
+    
     graph = st.session_state.knowledge_graph
     if not graph:
         return
@@ -521,135 +566,74 @@ def render_knowledge_graph_view() -> None:
 
 
 async def ask_chain(question: str, chain):
-    full_response = ""
-    documents = []
+    
     model = st.session_state.llm or create_llm()
     st.session_state.llm = model
     recent_messages = st.session_state.messages[:-1]
-    plan = await plan_question(
+    runtime = OrchestratorRuntime(
         model=model,
-        question=question,
+        source_records=st.session_state.source_records,
+        source_profiles=st.session_state.source_profiles,
+        active_source_ids=st.session_state.active_source_ids,
+        chunk_documents=st.session_state.chunk_documents,
+        vector_store=st.session_state.vector_store,
         recent_messages=recent_messages,
-        source_names=st.session_state.source_names,
-        active_source_names=st.session_state.active_source_names,
-        last_content_intent=st.session_state.last_content_intent,
+        session_id=st.session_state.session_id,
     )
-    selected_sources = list(plan.source_names)
-    if requires_source_selection(plan):
-        full_response = "我没能确定你指的是哪一份资料。当前可用来源：\n\n" + "\n".join(
-            f"- {name}" for name in st.session_state.source_names
-        )
-        with st.chat_message("assistant"):
-            st.markdown(full_response)
-        st.session_state.last_documents = []
-        record_message("assistant", full_response)
-        return
-
-    st.session_state.active_source_names = next_active_sources(
-        st.session_state.active_source_names,
-        plan,
-    )
-    if plan.intent in CONTENT_INTENTS:
-        st.session_state.last_content_intent = plan.intent
+    
+    with st.status("执行过程", expanded=False) as status:
+        status.write("正在理解问题并处理资料...")
+        result = await execute_question(question, runtime)
+        status.update(label="执行过程：回答完成", state="complete")
+    documents = list(result.documents)
+    st.session_state.active_source_ids = list(result.active_source_ids)
+    names_by_id = {
+        record.source_id: record.source_name
+        for record in st.session_state.source_records
+    }
+    st.session_state.active_source_names = [
+        names_by_id[source_id]
+        for source_id in result.active_source_ids
+        if source_id in names_by_id
+    ]
 
     with st.chat_message("assistant"):
-        if plan.intent == "inventory":
-            inventory_sources = selected_sources or st.session_state.source_names
-            full_response = format_source_inventory(inventory_sources)
-            st.markdown(full_response)
-            st.session_state.last_documents = []
-            record_message("assistant", full_response)
-            return
-
-        if plan.intent == "full_text":
-            full_text_sources = selected_sources or st.session_state.active_source_names
-            if not full_text_sources and plan.scope == "all":
-                full_text_sources = st.session_state.source_names
-            full_response = format_source_full_text(
-                plan.standalone_question,
-                st.session_state.source_names,
-                st.session_state.source_profiles,
-                selected_source_names=full_text_sources,
-            )
-            st.markdown(full_response)
-            st.session_state.last_documents = []
-            record_message("assistant", full_response)
-            return
-
-
-        if plan.intent == "overview":
-            overview_sources = selected_sources or st.session_state.active_source_names
-            if not overview_sources and plan.scope == "all":
-                overview_sources = st.session_state.source_names
-            profiles = select_source_profiles(st.session_state.source_profiles, overview_sources)
-            full_response = await generate_overview_answer(
-                model=model,
-                question=plan.standalone_question,
-                source_profiles=profiles,
-            )
-            st.markdown(full_response)
-            st.session_state.last_documents = []
-            record_message("assistant", full_response)
-            return
-
-        if plan.intent == "chat":
-            full_response = await generate_chat_answer(
-                model=model,
-                question=plan.standalone_question,
-                recent_messages=recent_messages,
-            )
-            st.markdown(full_response)
-            st.session_state.last_documents = []
-            record_message("assistant", full_response)
-            return
-
-        answer_box = st.empty()
-        retrieval_sources = selected_sources if plan.scope == "selected" else None
-        retriever = create_retriever(
-            model,
-            vector_store=st.session_state.vector_store,
-            source_names=retrieval_sources,
-        )
-        planned_chain = create_chain(model, retriever, use_history=False)
-        with st.status("执行过程", expanded=False) as status:
-            step_box = st.empty()
-            async for event in ask_question(
-                planned_chain,
-                plan.standalone_question,
-                session_id=st.session_state.session_id,
-            ):
-                if isinstance(event, list):
-                    documents.extend(event)
-                    status.update(label="执行过程：已召回相关资料片段", state="running")
-                    step_box.write(f"召回片段：{len(documents)}")
-                elif isinstance(event, str):
-                    full_response += event
-                    status.update(label="执行过程：正在生成回答", state="running")
-                    answer_box.markdown(full_response)
-            status.update(label="执行过程：回答完成", state="complete")
+        st.markdown(result.answer)
 
         if documents:
             with st.expander("引用来源", expanded=False):
                 for i, doc in enumerate(documents, 1):
-                    source = doc.metadata.get("source") or doc.metadata.get("file_path") or "已导入资料"
+                    source = (
+                        doc.metadata.get("source_name")
+                        or doc.metadata.get("source")
+                        or doc.metadata.get("file_path")
+                        or "已导入资料"
+                    )
                     page = doc.metadata.get("page")
+                    if page is None:
+                        page = doc.metadata.get("page_start")
+                    chunk_id = doc.metadata.get("chunk_id")
                     label = f"[{i}] {Path(str(source)).name}"
                     if page is not None:
                         label += f" · 第 {page} 页"
+                    if chunk_id:
+                        label += f" · {chunk_id}"
                     st.markdown(f"**{label}**")
                     st.write(doc.page_content)
 
     st.session_state.last_documents = documents
-    record_message("assistant", full_response)
+    record_message("assistant", result.answer)
 
 
 def render_message_history() -> None:
+    
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
 
 def scroll_chat_to_bottom() -> None:
+    
     components.html(
         """
         <script>
@@ -669,6 +653,7 @@ def scroll_chat_to_bottom() -> None:
 
 
 def render_chat(chain) -> None:
+    
     st.header("知识库问答")
 
     col_status, col_sources = st.columns([1, 2])
@@ -709,6 +694,7 @@ def render_chat(chain) -> None:
 
 
 def main() -> None:
+    
     init_state()
     render_sidebar()
 

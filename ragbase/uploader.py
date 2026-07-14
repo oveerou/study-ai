@@ -1,3 +1,5 @@
+
+
 import shutil
 from pathlib import Path
 from typing import List
@@ -10,6 +12,7 @@ from ragbase.config import Config
 def upload_files(
     files: List[UploadedFile], remove_old_files: bool = True
 ) -> List[Path]:
+    
     if remove_old_files:
         shutil.rmtree(Config.Path.DATABASE_DIR, ignore_errors=True)
         shutil.rmtree(Config.Path.DOCUMENTS_DIR, ignore_errors=True)

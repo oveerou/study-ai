@@ -1,3 +1,5 @@
+
+
 from pathlib import Path
 
 
@@ -5,6 +7,7 @@ APP = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def test_app_uses_learning_agent_branding():
+    
     text = APP.read_text(encoding="utf-8")
 
     assert "学习助手" in text
@@ -14,6 +17,7 @@ def test_app_uses_learning_agent_branding():
 
 
 def test_app_does_not_show_original_ragbase_branding():
+    
     text = APP.read_text(encoding="utf-8")
 
     forbidden = [
@@ -33,6 +37,7 @@ def test_app_does_not_show_original_ragbase_branding():
 
 
 def test_published_code_does_not_depend_on_local_machine_paths():
+    
     root = Path(__file__).resolve().parents[1]
     checked_files = [root / "app.py", root / "ragbase" / "model.py"]
 

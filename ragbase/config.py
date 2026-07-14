@@ -1,9 +1,18 @@
+
+
+
+
+
+
 import os
 from pathlib import Path
 
 
 class Config:
+    
+
     class Path:
+        
         APP_HOME = Path(os.getenv("APP_HOME", Path(__file__).parent.parent))
         DATABASE_DIR = APP_HOME / "docs-db"
         DOCUMENTS_DIR = APP_HOME / "tmp"
@@ -12,9 +21,11 @@ class Config:
         KNOWLEDGE_GRAPH_DIR = APP_HOME / "knowledge-graphs"
 
     class Database:
+        
         DOCUMENTS_COLLECTION = "documents"
 
     class Model:
+        
         EMBEDDINGS = "BAAI/bge-small-zh-v1.5"
         RERANKER = "ms-marco-MultiBERT-L-12"
         LOCAL_LLM = "gemma2:9b"
@@ -26,8 +37,14 @@ class Config:
         USE_LOCAL = False
 
     class Retriever:
+        
         USE_RERANKER = True
         USE_CHAIN_FILTER = False
+        RETRIEVAL_TOP_K = 20
+        RERANK_TOP_N = 5
+        FINAL_TOP_N = 5
+        CONTEXT_MAX_TOKENS = 6000
 
     DEBUG = False
     CONVERSATION_MESSAGES_LIMIT = 0
+    

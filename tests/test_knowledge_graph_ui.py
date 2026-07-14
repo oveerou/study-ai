@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import importlib.util
@@ -10,6 +12,7 @@ APP = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def test_app_exposes_local_knowledge_graph_generation_and_view():
+    
     text = APP.read_text(encoding="utf-8")
 
     assert hasattr(Config.Path, "KNOWLEDGE_GRAPH_DIR")
@@ -23,6 +26,7 @@ def test_app_exposes_local_knowledge_graph_generation_and_view():
 
 
 def test_knowledge_graph_generation_does_not_crash_sidebar_on_exception():
+    
     text = APP.read_text(encoding="utf-8")
     body = text.split("def render_knowledge_graph_controls() -> None:", 1)[1].split("\n\ndef render_sidebar", 1)[0]
 
@@ -32,6 +36,7 @@ def test_knowledge_graph_generation_does_not_crash_sidebar_on_exception():
 
 
 def test_knowledge_graph_view_does_not_nest_expanders():
+    
     text = APP.read_text(encoding="utf-8")
     body = text.split("def render_knowledge_graph_view() -> None:", 1)[1].split("\n\nasync def ask_chain", 1)[0]
 
@@ -40,6 +45,7 @@ def test_knowledge_graph_view_does_not_nest_expanders():
 
 
 def test_knowledge_graph_view_shows_one_complete_graph_without_segment_picker():
+    
     text = APP.read_text(encoding="utf-8")
     body = text.split("def render_knowledge_graph_view() -> None:", 1)[1].split("\n\nasync def ask_chain", 1)[0]
 
@@ -51,6 +57,7 @@ def test_knowledge_graph_view_shows_one_complete_graph_without_segment_picker():
 
 
 def test_knowledge_graph_view_mentions_interactive_browser_capabilities():
+    
     text = APP.read_text(encoding="utf-8")
     body = text.split("def render_knowledge_graph_view() -> None:", 1)[1].split("\n\nasync def ask_chain", 1)[0]
 
@@ -58,4 +65,5 @@ def test_knowledge_graph_view_mentions_interactive_browser_capabilities():
 
 
 def test_graphviz_runtime_dependency_is_installed():
+    
     assert importlib.util.find_spec("graphviz") is not None

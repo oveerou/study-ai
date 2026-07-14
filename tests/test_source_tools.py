@@ -1,12 +1,16 @@
+
+
 from __future__ import annotations
 
 import pytest
 from langchain_core.documents import Document
 
+from ragbase.source_registry import attach_source_records, build_source_records
 from ragbase.source_tools import answer_source_tool, build_source_profiles, source_tool_route
 
 
 def test_file_inventory_questions_return_imported_file_names():
+    
     names = ["0 入门篇.pdf", "2025-2026-2复习大纲.pdf"]
 
     answer = answer_source_tool("我给了你什么文件", names, [])
@@ -19,6 +23,7 @@ def test_file_inventory_questions_return_imported_file_names():
 
 
 def test_file_name_question_is_inventory_not_document_qa():
+    
     names = ["1 基础篇-3图像增强.pdf"]
 
     answer = answer_source_tool("文件的名称", names, [])
@@ -28,6 +33,7 @@ def test_file_name_question_is_inventory_not_document_qa():
 
 
 def test_source_overview_uses_all_source_profiles():
+    
     documents = [
         Document(
             page_content="PSNR、SSIM、图像质量评价、数字图像处理基础。",
@@ -62,10 +68,12 @@ def test_source_overview_uses_all_source_profiles():
     ],
 )
 def test_full_text_intent_uses_compositional_language_cues(question):
+    
     assert source_tool_route(question) == "full_text"
 
 
 def test_full_text_answer_preserves_every_page_without_excerpt_truncation():
+    
     documents = [
         Document(
             page_content="第一页开头\n第一题：什么是图像质量评价？",
@@ -87,6 +95,7 @@ def test_full_text_answer_preserves_every_page_without_excerpt_truncation():
 
 
 def test_full_text_request_can_select_a_source_by_partial_file_name():
+    
     documents = [
         Document(
             page_content="复习大纲正文",
@@ -110,6 +119,7 @@ def test_full_text_request_can_select_a_source_by_partial_file_name():
 
 
 def test_full_text_executor_accepts_validated_source_names_without_reinterpreting_question():
+    
     documents = [
         Document(
             page_content="FIRST_SOURCE_CONTENT",
@@ -132,3 +142,58 @@ def test_full_text_executor_accepts_validated_source_names_without_reinterpretin
 
     assert "LAST_SOURCE_CONTENT" in answer
     assert "FIRST_SOURCE_CONTENT" not in answer
+
+
+def test_profiles_keep_source_ids_all_pages_and_summary_units():
+    
+    documents = [
+        Document(
+            page_content="PAGE TWO",
+            metadata={"source_id": "src_notes", "source_name": "notes.pdf", "page": 2},
+        ),
+        Document(
+            page_content="PAGE ONE",
+            metadata={"source_id": "src_notes", "source_name": "notes.pdf", "page": 1},
+        ),
+    ]
+
+    profile = build_source_profiles(documents, max_chars_per_source=4)[0]
+
+    assert profile["source_id"] == "src_notes"
+    assert [section["page"] for section in profile["sections"]] == [1, 2]
+    assert "PAGE ONE" in "\n".join(profile["summary_units"])
+    assert "PAGE TWO" in "\n".join(profile["summary_units"])
+    assert len(profile["excerpt"]) <= 4
+
+
+def test_profiles_keep_identical_content_files_as_separate_named_sources():
+    documents = [
+        Document(
+            page_content="SHARED BODY",
+            metadata={
+                "source": "D:/materials/first.pdf",
+                "source_name": "first.pdf",
+                "source_type": "pdf",
+                "page": 1,
+            },
+        ),
+        Document(
+            page_content="SHARED BODY",
+            metadata={
+                "source": "D:/archive/second.pdf",
+                "source_name": "second.pdf",
+                "source_type": "pdf",
+                "page": 1,
+            },
+        ),
+    ]
+    records = build_source_records(documents, "session-1")
+    attached = attach_source_records(documents, records)
+
+    profiles = build_source_profiles(attached)
+
+    assert [profile["name"] for profile in profiles] == ["first.pdf", "second.pdf"]
+    assert [profile["source_id"] for profile in profiles] == [
+        records[0].source_id,
+        records[1].source_id,
+    ]
